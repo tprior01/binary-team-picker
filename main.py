@@ -4,12 +4,9 @@ from datetime import timedelta
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
-from sqlalchemy import text, Column, Integer, String, ForeignKey, Numeric, Date, Boolean, or_, func
-from flask_sqlalchemy import SQLAlchemy
-from fastapi.encoders import jsonable_encoder
-from sqlalchemy.dialects.postgresql import ARRAY
-from sqlalchemy.ext.mutable import MutableList
+from sqlalchemy import text, or_
 from random import choice
+from models import db, Account, Team, Player, Match
 
 load_dotenv()
 
@@ -22,53 +19,8 @@ app.config['JWT_SECRET_KEY'] = getenv("SECRET_KEY")
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)
 app.config['JWT_TOKEN_LOCATION'] = ['headers', 'query_string']
 
-db = SQLAlchemy(app)
+db.init_app(app)
 jwt = JWTManager(app)
-
-
-class Account(db.Model):
-    id = Column(Integer, primary_key=True)
-    name = Column(String(80), nullable=False)
-    email = Column(String(150), nullable=False)
-    password = Column(String(255), nullable=False)
-
-    def to_json(self):
-        return jsonable_encoder(self, exclude={'password'})
-
-
-class Team(db.Model):
-    id = Column(Integer, primary_key=True)
-    name = Column(String(150), nullable=False)
-    members = Column(MutableList.as_mutable(ARRAY(Integer)))
-    pending = Column(MutableList.as_mutable(ARRAY(Integer)), default=[])
-
-    def to_json(self):
-        return jsonable_encoder(self, exclude={'members', 'pending'}, exclude_none=True)
-
-
-class Player(db.Model):
-    id = Column(Integer, primary_key=True)
-    name = Column(String(150), nullable=False)
-    team = Column(Integer, ForeignKey('team.id'))
-    account = Column(Integer, ForeignKey('account.id'))
-    initial_rating = Column(Numeric(3, 1), nullable=False)
-    current_rating = Column(Numeric(3, 1), nullable=False)
-
-    def to_json(self):
-        return jsonable_encoder(self, exclude={'team'}, exclude_none=True)
-
-
-class Match(db.Model):
-    id = Column(Integer, primary_key=True)
-    date = Column(Date, nullable=False)
-    team = Column(Integer, ForeignKey('team.id'))
-    pool = Column(ARRAY(Integer))
-    team0 = Column(ARRAY(Integer))
-    team1 = Column(ARRAY(Integer))
-    winner = Column(Boolean)
-
-    def to_json(self):
-        return jsonable_encoder(self, exclude_none=True)
 
 
 def create_tables():
@@ -79,11 +31,6 @@ def create_tables():
 def delete_tables():
     with app.app_context():
         db.drop_all()
-
-
-#
-# delete_tables()
-# create_tables()
 
 
 def test_connection():
