@@ -246,17 +246,17 @@ def calculate_teams(team_id, match_id):
             players = Player.query.where(Player.id.in_(match_from_db.pool)).all()
             n = len(players)
             if n % 2 == 0:
-                opts = [f"{i:b}" for i in range(max_bits(n - 1), 2 ** n) if f"{i:b}".count("0") == n / 2]
+                options = [f"{i:b}" for i in range(max_bits(n - 1), 2 ** n) if f"{i:b}".count("0") == n / 2]
                 pool_ratings = [float(player.current_rating) for player in players]
                 team_ratings = [round(abs(sum([pool_ratings[i] for i in range(n) if bit[i] == "0"]) -
-                                          sum([pool_ratings[i] for i in range(n) if bit[i] == "1"])), 1) for bit in opts]
-                parsed = [opts[i] for i in range(len(opts)) if team_ratings[i] == min(team_ratings)]
+                                          sum([pool_ratings[i] for i in range(n) if bit[i] == "1"])), 1) for bit in options]
+                parsed = [options[i] for i in range(len(options)) if team_ratings[i] == min(team_ratings)]
                 teams = choice(parsed)
                 match_from_db.team0 = [players[i].id for i, bit in enumerate(teams) if bit == "0"]
                 match_from_db.team1 = [players[i].id for i, bit in enumerate(teams) if bit == "1"]
                 db.session.merge(match_from_db)
                 db.session.commit()
-                return jsonify({'msg': 'Teams calculated and updated successfully', 'total options': len(opts),
+                return jsonify({'msg': 'Teams calculated and updated successfully', 'total options': len(options),
                                 'parsed options': len(parsed)}), 202
             else:
                 return jsonify({'msg': 'Pool must be an equal number'}), 404
