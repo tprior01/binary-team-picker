@@ -1,14 +1,14 @@
 from os import getenv
 from hashlib import sha256
 from datetime import timedelta
-from dotenv import load_dotenv
+# from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from sqlalchemy import text, or_
 from random import choice
 from models import db, Account, Team, Player, Match
 
-load_dotenv()
+# load_dotenv()
 
 app = Flask(__name__)
 
