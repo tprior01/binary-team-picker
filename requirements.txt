@@ -1,0 +1,6 @@
+fastapi==0.95.0
+Flask==2.2.3
+Flask_JWT_Extended==4.4.4
+flask_sqlalchemy==3.0.3
+python-dotenv==1.0.0
+SQLAlchemy==2.0.6
