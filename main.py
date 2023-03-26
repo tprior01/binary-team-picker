@@ -1,22 +1,20 @@
 from os import getenv
 from hashlib import sha256
 from datetime import timedelta
-from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from sqlalchemy import or_
 from random import choice
-from models import db, Account, Team, Player, Match, Rating
-
+from models import db, Account, Team, Player, Match
 from fastapi.encoders import jsonable_encoder
-
-
-load_dotenv()
 
 app = Flask(__name__)
 
+# from dotenv import load_dotenv
+# load_dotenv()
+# app.config['SQLALCHEMY_ECHO'] = True
+
 app.config["SQLALCHEMY_DATABASE_URI"] = getenv("SQLALCHEMY_DATABASE_URI")
-app.config['SQLALCHEMY_ECHO'] = True
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['JWT_SECRET_KEY'] = getenv("SECRET_KEY")
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)
@@ -406,5 +404,5 @@ def col_to_set(query):
 
 
 if __name__ == '__main__':
-    # app.run(port=getenv("PORT"))
-    app.run(port=8000)
+    app.run(port=getenv("PORT"))
+    # app.run(port=8000)
