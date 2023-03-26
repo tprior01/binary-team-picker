@@ -238,7 +238,7 @@ def add_match(team_id):
 
 @app.route("/team/<string:team_id>/remove-match", methods=["POST"])
 @jwt_required()
-def add_match(team_id):
+def remove_match(team_id):
     team_from_db = Team.query.where(Team.members.contains([get_jwt_identity()]) & (Team.team_id == team_id)).first()
     if not team_from_db:
         return jsonify({'msg': 'Team not found (does it exist and are you a member?)'}), 404
