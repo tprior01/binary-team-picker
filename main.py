@@ -3,7 +3,7 @@ from hashlib import sha256
 from datetime import timedelta
 from flask import Flask, request, jsonify
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
-from sqlalchemy import or_
+from sqlalchemy import or_, select
 from random import choice
 from models import db, Account, Team, Player, Match
 from fastapi.encoders import jsonable_encoder
@@ -39,15 +39,19 @@ def delete_tables():
 def hello_world():
     return jsonify({'msg': 'hello world'}), 200
 
+"""
+update to session.execute(select(...)) 
+"""
+
 
 @app.route("/register", methods=["POST"])
 def register():
     """Required fields: email, name, password. Adds a record to the account relation."""
-    account_builder = request.get_json()
-    account_from_db = Account.query.filter_by(email=account_builder["email"]).first()
+    data = request.get_json()
+    account_from_db = db.session.execute(select(Account).filter_by(email=data["email"])).scalar()
     if not account_from_db:
-        account_builder["password"] = sha256(account_builder["password"].encode("utf-8")).hexdigest()
-        account = Account(**account_builder)
+        data["password"] = sha256(data["password"].encode("utf-8")).hexdigest()
+        account = Account(**data)
         db.session.add(account)
         db.session.commit()
         return jsonify({'msg': 'Account created successfully'}), 201
@@ -58,10 +62,10 @@ def register():
 @app.route("/login", methods=["POST"])
 def login():
     """Required fields: email, password. Returns a jwt token."""
-    login_details = request.get_json()
-    account_from_db = Account.query.filter_by(email=login_details["email"]).first()
+    data = request.get_json()
+    account_from_db = db.session.execute(select(Account).filter_by(email=data["email"])).scalar()
     if account_from_db:
-        encrypted_password = sha256(login_details['password'].encode("utf-8")).hexdigest()
+        encrypted_password = sha256(data['password'].encode("utf-8")).hexdigest()
         if encrypted_password == account_from_db.password:
             access_token = create_access_token(identity=account_from_db.account_id)
             return jsonify(access_token=access_token), 200
@@ -72,8 +76,8 @@ def login():
 @jwt_required()
 def account():
     """Returns an account and its associated teams (if any)."""
-    account = Account.query.filter_by(account_id=get_jwt_identity()).first()
-    teams = Team.query.where(Team.members.contains([get_jwt_identity()])).all()
+    account = db.session.execute(select(Account).filter_by(account_id=get_jwt_identity())).scalar()
+    teams = db.session.execute(select(Team).where(Team.members.contains([get_jwt_identity()]))).scalars().all()
     if account:
         return jsonify({"account": account.to_json()}, {"teams": [team.to_json() for team in teams]}), 200
     else:
@@ -326,9 +330,10 @@ def calculate_teams(team_id, match_id):
         return jsonify({'msg': 'Teams cannot be calculated if the match winner has been declared'}), 404
     players = Player.query.where(Player.player_id.in_(match_from_db.pool)).all()
     n = len(players)
+    m = n / 2
     if n % 2 != 0:
         return jsonify({'msg': 'Pool must be an equal number'}), 404
-    options = [f"{i:b}" for i in range(max_bits(n - 1), 2 ** n) if f"{i:b}".count("0") == n / 2]
+    options = [f"{i:b}" for i in range(max_bits(n - 1), 2 ** n) if f"{i:b}".count("0") == m]
     pool_ratings = [float(player.current_rating) for player in players]
     team_ratings = [round(abs(sum([pool_ratings[i] for i in range(n) if bit[i] == "0"]) -
                               sum([pool_ratings[i] for i in range(n) if bit[i] == "1"])), 1) for bit in options]
