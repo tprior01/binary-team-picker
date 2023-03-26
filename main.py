@@ -213,7 +213,8 @@ def add_player(team_id):
     if not team_from_db:
         return jsonify({'msg': 'Team not found (does it exist and are you a member?)'}), 404
     data = request.get_json()
-    player_from_db = Player.query.filter(or_(Player.name == data["name"], Player.account == data.get("account") if data.get("account") else False)).first()
+    player_from_db = Player.query.filter(or_(
+        Player.name == data["name"], Player.account == data.get("account") if data.get("account") else False)).first()
     if player_from_db:
         return jsonify({'msg': 'Player already exists'}), 202
     db.session.add(Player(**data))
@@ -329,10 +330,11 @@ def calculate_teams(team_id, match_id):
     pool_ratings = [float(player.current_rating) for player in players]
     team_ratings = [round(abs(sum([pool_ratings[i] for i in range(n) if bit[i] == "0"]) -
                               sum([pool_ratings[i] for i in range(n) if bit[i] == "1"])), 1) for bit in options]
-    parsed = [options[i] for i in range(len(options)) if team_ratings[i] == min(team_ratings)]
-    teams = choice(parsed)
-    match_from_db.team0 = [players[i].account_id for i, bit in enumerate(teams) if bit == "0"]
-    match_from_db.team1 = [players[i].account_id for i, bit in enumerate(teams) if bit == "1"]
+    min_team_rating = min(team_ratings)
+    parsed = [options[i] for i in range(len(options)) if team_ratings[i] == min_team_rating]
+    teams = enumerate(choice(parsed))
+    match_from_db.team0 = [players[i].account_id for i, bit in teams if bit == "0"]
+    match_from_db.team1 = [players[i].account_id for i, bit in teams if bit == "1"]
     db.session.merge(match_from_db)
     db.session.commit()
     return jsonify({'msg': 'Teams calculated and updated successfully', 'total options': len(options),
