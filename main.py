@@ -10,8 +10,8 @@ from fastapi.encoders import jsonable_encoder
 
 app = Flask(__name__)
 
-from dotenv import load_dotenv
-load_dotenv()
+# from dotenv import load_dotenv
+# load_dotenv()
 # app.config['SQLALCHEMY_ECHO'] = True
 
 app.config["SQLALCHEMY_DATABASE_URI"] = getenv("SQLALCHEMY_DATABASE_URI")
@@ -406,17 +406,5 @@ def col_to_set(query):
 
 
 if __name__ == '__main__':
-    n = 10
-    def check(x, n): return x if x.count("0") == n / 2 else None
-
-
-    result_list = [y for x in (f"{i:b}" for i in range(max_bits(n - 1), 2 ** n)) if (y := check(x, n))]
-    result_list2 = [y for x in (f"{i:b}" for i in range(max_bits(n - 1), 2 ** n)) if (y := x if x.count("0") == n / 2 else None)]
-
-    print(result_list)
-    print(result_list2)
-
-
-
-    # app.run(port=getenv("PORT"))
+    app.run(port=getenv("PORT"))
     # app.run(port=8000)
