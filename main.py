@@ -10,9 +10,10 @@ from fastapi.encoders import jsonable_encoder
 
 app = Flask(__name__)
 
-# from dotenv import load_dotenv
-# load_dotenv()
-# app.config['SQLALCHEMY_ECHO'] = True
+from dotenv import load_dotenv
+load_dotenv()
+app.config['SQLALCHEMY_ECHO'] = True
+
 
 app.config["SQLALCHEMY_DATABASE_URI"] = getenv("SQLALCHEMY_DATABASE_URI")
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -228,7 +229,8 @@ def add_match(team_id):
     team_from_db = Team.query.where(Team.members.contains([get_jwt_identity()]) & (Team.team_id == team_id)).first()
     if not team_from_db:
         return jsonify({'msg': 'Team not found (does it exist and are you a member?)'}), 404
-    match_from_db = Match.query.filter_by(team=team_id).first()
+    data = request.get_json()
+    match_from_db = Match.query.filter((Match.team == team_id) & (Match.date == data["date"])).first()
     if match_from_db:
         return jsonify({'msg': 'Match already exists'}), 404
     match = Match(**request.get_json(), team=team_from_db.team_id)
@@ -407,4 +409,3 @@ def col_to_set(query):
 
 if __name__ == '__main__':
     app.run(port=getenv("PORT"))
-    # app.run(port=8000)
