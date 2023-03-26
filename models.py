@@ -9,7 +9,7 @@ db = SQLAlchemy()
 
 
 class Account(db.Model):
-    id = Column(Integer, primary_key=True)
+    account_id = Column(Integer, primary_key=True)
     name = Column(String(80), nullable=False)
     email = Column(String(150), nullable=False)
     password = Column(String(255), nullable=False)
@@ -19,7 +19,7 @@ class Account(db.Model):
 
 
 class Team(db.Model):
-    id = Column(Integer, primary_key=True)
+    team_id = Column(Integer, primary_key=True)
     name = Column(String(150), nullable=False)
     members = Column(MutableList.as_mutable(ARRAY(Integer)))
     pending = Column(MutableList.as_mutable(ARRAY(Integer)), default=[])
@@ -29,10 +29,10 @@ class Team(db.Model):
 
 
 class Player(db.Model):
-    id = Column(Integer, primary_key=True)
+    player_id = Column(Integer, primary_key=True)
     name = Column(String(150), nullable=False)
-    team = Column(Integer, ForeignKey('team.id'))
-    account = Column(Integer, ForeignKey('account.id'))
+    team = Column(Integer, ForeignKey('team.team_id'))
+    account = Column(Integer, ForeignKey('account.account_id'))
     initial_rating = Column(Numeric(3, 1), nullable=False)
     current_rating = Column(Numeric(3, 1), nullable=False)
 
@@ -40,10 +40,15 @@ class Player(db.Model):
         return jsonable_encoder(self, exclude={'team'}, exclude_none=True)
 
 
+class Rating(db.Model):
+    player_id = Column(Integer, ForeignKey('player.player_id'), primary_key=True)
+    date = Column(Date, ForeignKey('match.date'), primary_key=True)
+
+
 class Match(db.Model):
-    id = Column(Integer, primary_key=True)
+    match_id = Column(Integer, primary_key=True)
     date = Column(Date, nullable=False)
-    team = Column(Integer, ForeignKey('team.id'))
+    team = Column(Integer, ForeignKey('team.team_id'))
     pool = Column(ARRAY(Integer))
     team0 = Column(ARRAY(Integer))
     team1 = Column(ARRAY(Integer))
