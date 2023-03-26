@@ -40,11 +40,6 @@ class Player(db.Model):
         return jsonable_encoder(self, exclude={'team'}, exclude_none=True)
 
 
-class Rating(db.Model):
-    player_id = Column(Integer, ForeignKey('player.player_id'), primary_key=True)
-    date = Column(Date, ForeignKey('match.date'), primary_key=True)
-
-
 class Match(db.Model):
     match_id = Column(Integer, primary_key=True)
     date = Column(Date, nullable=False)
