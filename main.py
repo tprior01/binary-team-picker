@@ -428,4 +428,11 @@ def remove_winner(team_id, match_id):
 
 
 if __name__ == '__main__':
-    app.run(port=getenv("PORT"))
+    port = getenv("PORT")
+    if port:
+        try:
+            app.run(port=int(port))
+        except ValueError:
+            raise(Exception("PORT environment variable must be an integer"))
+
+            
