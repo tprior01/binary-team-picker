@@ -1,7 +1,7 @@
 from os import getenv
 from hashlib import sha256
 from datetime import timedelta
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from sqlalchemy import select
 from random import choice
@@ -24,6 +24,16 @@ app.config['JWT_TOKEN_LOCATION'] = ['headers', 'query_string']
 
 db.init_app(app)
 jwt = JWTManager(app)
+
+
+def max_bits(b):
+    """Returns the largest decimal number for a given bit length"""
+    return (1 << b) - 1
+
+
+def binary_options(pool_size, team_size):
+    """Returns a list of binary strings representing all possible team combinations"""
+    return [f"{i:b}" for i in range(max_bits(pool_size - 1), 2 ** pool_size) if f"{i:b}".count("0") == team_size]
 
 
 @app.route("/", methods=["GET"])
@@ -339,7 +349,7 @@ def calculate_teams(team_id, match_id):
         return jsonify({'msg': 'Pool must be an equal number'}), 404
     team_size = pool_size / 2
     pool_range = range(pool_size)
-    options = [f"{i:b}" for i in range(max_bits(pool_size - 1), 2 ** pool_size) if f"{i:b}".count("0") == team_size]
+    options = binary_options(pool_size, team_size)
     pool_ratings = [float(player.current_rating) for player in players]
 
     team_ratings = [round(abs(sum([pool_ratings[i] for i in pool_range if binary[i] == "0"]) -
@@ -415,11 +425,6 @@ def remove_winner(team_id, match_id):
     match_from_db.winner = None
     db.session.commit()
     return jsonify({'msg': 'Winner removed and player ratings reversed'}), 202
-
-
-def max_bits(b):
-    """Returns the largest decimal number for a given bit length"""
-    return (1 << b) - 1
 
 
 if __name__ == '__main__':
