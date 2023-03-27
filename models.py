@@ -2,7 +2,7 @@ from flask_sqlalchemy import SQLAlchemy
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.ext.mutable import MutableList
-from sqlalchemy import Column, Integer, String, ForeignKey, Numeric, Date, Boolean
+from sqlalchemy import Column, Integer, String, ForeignKey, Numeric, Date
 
 
 db = SQLAlchemy()
@@ -44,10 +44,10 @@ class Match(db.Model):
     match_id = Column(Integer, primary_key=True)
     date = Column(Date, nullable=False)
     team = Column(Integer, ForeignKey('team.team_id'))
-    pool = Column(ARRAY(Integer))
-    team0 = Column(ARRAY(Integer))
-    team1 = Column(ARRAY(Integer))
-    winner = Column(Boolean)
+    pool = Column(ARRAY(Integer), default=[])
+    team0 = Column(ARRAY(Integer), default=[])
+    team1 = Column(ARRAY(Integer), default=[])
+    winner = Column(Integer)
 
     def to_json(self):
-        return jsonable_encoder(self, exclude_none=True)
+        return jsonable_encoder(self, exclude={'match_id', 'team', 'pool', 'team0', 'team1'}, exclude_none=True)

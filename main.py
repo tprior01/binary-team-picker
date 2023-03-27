@@ -3,16 +3,17 @@ from hashlib import sha256
 from datetime import timedelta
 from flask import Flask, request, jsonify
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from random import choice
 from models import db, Account, Team, Player, Match
-from fastapi.encoders import jsonable_encoder
+from decimal import Decimal
 
 app = Flask(__name__)
 
-from dotenv import load_dotenv
-load_dotenv()
-app.config['SQLALCHEMY_ECHO'] = True
+
+# from dotenv import load_dotenv
+# load_dotenv()
+# app.config['SQLALCHEMY_ECHO'] = True
 
 
 app.config["SQLALCHEMY_DATABASE_URI"] = getenv("SQLALCHEMY_DATABASE_URI")
@@ -25,34 +26,19 @@ db.init_app(app)
 jwt = JWTManager(app)
 
 
-def create_tables():
-    with app.app_context():
-        db.create_all()
-
-
-def delete_tables():
-    with app.app_context():
-        db.drop_all()
-
-
 @app.route("/", methods=["GET"])
 def hello_world():
     return jsonify({'msg': 'hello world'}), 200
 
-"""
-update to session.execute(select(...)) 
-"""
-
 
 @app.route("/register", methods=["POST"])
 def register():
-    """Required fields: email, name, password. Adds a record to the account relation."""
+    """Registers an account. Required fields: name, email, password."""
     data = request.get_json()
     account_from_db = db.session.execute(select(Account).filter_by(email=data["email"])).scalar()
     if not account_from_db:
         data["password"] = sha256(data["password"].encode("utf-8")).hexdigest()
-        account = Account(**data)
-        db.session.add(account)
+        db.session.add(Account(**data))
         db.session.commit()
         return jsonify({'msg': 'Account created successfully'}), 201
     else:
@@ -61,7 +47,7 @@ def register():
 
 @app.route("/login", methods=["POST"])
 def login():
-    """Required fields: email, password. Returns a jwt token."""
+    """Returns a json web token. Required fields: email, password."""
     data = request.get_json()
     account_from_db = db.session.execute(select(Account).filter_by(email=data["email"])).scalar()
     if account_from_db:
@@ -72,24 +58,28 @@ def login():
     return jsonify({'msg': 'The username or password is incorrect'}), 401
 
 
-@app.route("/account", methods=["GET"])
+@app.route("/account", methods=["GET", "DELETE"])
 @jwt_required()
 def account():
-    """Returns an account and its associated teams (if any)."""
-    account = db.session.execute(select(Account).filter_by(account_id=get_jwt_identity())).scalar()
-    teams = db.session.execute(select(Team).where(Team.members.contains([get_jwt_identity()]))).scalars().all()
-    if account:
-        return jsonify({"account": account.to_json()}, {"teams": [team.to_json() for team in teams]}), 200
-    else:
+    """Returns or deletes an account."""
+    account_from_db = db.session.execute(select(Account).filter_by(account_id=get_jwt_identity())).scalar()
+    if not account_from_db:
         return jsonify({'msg': 'Account not found'}), 404
+    if request.method == "POST":
+        teams = db.session.execute(select(Team).where(Team.members.contains([get_jwt_identity()]))).scalars().all()
+        return jsonify({"account": account_from_db.to_json()}, {"teams": [team.to_json() for team in teams]}), 200
+    else:
+        db.session.delete(account_from_db)
+        db.session.commit()
 
 
 @app.route("/register-team", methods=["POST"])
 @jwt_required()
 def register_team():
-    """Required fields: name. Adds a record to the team relation."""
+    """Registers a team. Required fields: name."""
     data = request.get_json()
-    team_from_db = Team.query.where(Team.members.contains([get_jwt_identity()]) & (Team.name == data["name"])).first()
+    team_from_db = db.session.execute(select(Team).where(
+        Team.members.contains([get_jwt_identity()]) & (Team.name == data["name"]))).scalar()
     if team_from_db:
         return jsonify({'msg': 'Team already exists'}), 404
     team = Team(**data, members=[get_jwt_identity()])
@@ -98,29 +88,33 @@ def register_team():
     return jsonify({'msg': 'Team created successfully'}), 201
 
 
-@app.route("/team/<string:team_id>", methods=["GET"])
+@app.route("/team/<string:team_id>", methods=["GET", "DELETE"])
 @jwt_required()
 def get_team(team_id):
-    """Returns the accounts and players of a team if you are a member of that team else just the team name."""
-    team_from_db = Team.query.filter_by(team_id=team_id).first()
+    """Returns or deletes a team."""
+    team_from_db = db.session.execute(select(Team).filter_by(team_id=team_id)).scalar()
     if not team_from_db:
         return jsonify({'msg': 'Team not found (does it exist and are you a member?)'}), 404
     if get_jwt_identity() not in team_from_db.members:
         return {"team": team_from_db.to_json()}, 200
-    members = Account.query.filter(Account.account_id.in_(team_from_db.members)).all()
-    pendings = Account.query.filter(Account.account_id.in_(team_from_db.pending)).all()
-    players = Player.query.filter_by(team=team_id).all()
-    return jsonify({"team": team_from_db.to_json()},
-                   {"members": [member.to_json() for member in members]},
-                   {"pending": [pending.to_json() for pending in pendings]},
-                   {"players": [player.to_json() for player in players]}), 200
+    if request.method == "GET":
+        players = db.session.execute(select(Player).filter_by(team=team_id)).scalars().all()
+        return jsonify({"team": team_from_db.to_json(),
+                        "players": [player.to_json() for player in players],
+                        "members": [player.to_json() for player in players if player.player_id in team_from_db.members],
+                        "pending": [player.to_json() for player in players if player.player_id in team_from_db.pending]
+                        }), 200
+    else:
+        db.session.delete(team_from_db)
+        db.session.commit()
+        return jsonify({'msg': 'Team deleted'}), 200
 
 
 @app.route("/team/<string:team_id>/join", methods=["PATCH"])
 @jwt_required()
 def join_team(team_id):
-    """Adds your account to the pending field of a team."""
-    team_from_db = Team.query.filter_by(team_id=team_id).first()
+    """Adds account of json web token to pending field of team."""
+    team_from_db = db.session.execute(select(Team).filter_by(team_id=team_id)).scalar()
     if not team_from_db:
         return jsonify({'msg': 'Team not found'}), 404
     if get_jwt_identity() in team_from_db.members:
@@ -131,59 +125,53 @@ def join_team(team_id):
     return jsonify({'msg': 'Requested to join team successfully'}), 202
 
 
-@app.route("/team/<string:team_id>/approve-request", methods=["PATCH"])
+@app.route("/team/<string:team_id>/process-request", methods=["PATCH", "DELETE"])
 @jwt_required()
-def approve_request(team_id):
-    """Adds your account to the pending field of a team."""
-    team_from_db = Team.query.where(Team.members.contains([get_jwt_identity()]) & (Team.team_id == team_id)).first()
+def process_request(team_id):
+    """Adds member to team or deletes member request. Required fields: account_id. Optional field: player_id."""
+    team_from_db = db.session.execute(select(Team).where(Team.members.contains([get_jwt_identity()])
+                                                         & (Team.team_id == team_id))).scalar()
     if not team_from_db:
         return jsonify({'msg': 'Team not found (does it exist and are you a member?)'}), 404
     data = request.get_json()
-    if not data.get("player_id") and data["account_id"] in team_from_db.pending:
-        team_from_db.pending.remove(data["account_id"])
-        team_from_db.members.append(data["account_id"])
-        db.session.merge(team_from_db)
-        db.session.commit()
-        return jsonify({'msg': 'Member added successfully'}), 202
-    elif data["account_id"] in team_from_db.pending and data["account_id"] in team_from_db.pending:
-        team_from_db.pending.remove(data["account_id"])
-        team_from_db.members.append(data["account_id"])
-        player = Player.query.filter_by(player_id=data["player_id"]).first()
-        player.account = data["account_id"]
-        db.session.merge(team_from_db)
-        db.session.merge(player)
-        db.session.commit()
-        return jsonify({'msg': 'Member added successfully and associated to player'}), 202
+    if request.method == "PATCH":
+        if not data.get("player_id") and data["account_id"] in team_from_db.pending:
+            team_from_db.pending.remove(data["account_id"])
+            team_from_db.members.append(data["account_id"])
+            db.session.merge(team_from_db)
+            db.session.commit()
+            return jsonify({'msg': 'Member added successfully'}), 202
+        elif data["account_id"] in team_from_db.pending and data["account_id"] in team_from_db.pending:
+            team_from_db.pending.remove(data["account_id"])
+            team_from_db.members.append(data["account_id"])
+            player_from_db = db.session.execute(select(Player).filter_by(player_id=data["player_id"])).scalar()
+            player_from_db.account = data["account_id"]
+            db.session.merge(team_from_db)
+            db.session.merge(player_from_db)
+            db.session.commit()
+            return jsonify({'msg': 'Member added successfully and associated to player'}), 202
+        else:
+            return jsonify({'msg': 'Request not found'}), 404
     else:
-        return jsonify({'msg': 'Request not found'}), 404
-
-
-@app.route("/team/<string:team_id>/delete-request", methods=["PATCH"])
-@jwt_required()
-def delete_request(team_id):
-    """Adds account to the pending field of a team."""
-    team_from_db = Team.query.where(Team.members.contains([get_jwt_identity()]) & (Team.team_id == team_id)).first()
-    if not team_from_db:
-        return jsonify({'msg': 'Team not found (does it exist and are you a member?)'}), 404
-    data = request.get_json()
-    team_from_db.pending.remove(data["player"])
-    db.session.merge(team_from_db)
-    db.session.commit()
-    return jsonify({'msg': 'Request rejected successfully'}), 202
+        team_from_db.pending.remove(data["account_id"])
+        db.session.merge(team_from_db)
+        db.session.commit()
+        return jsonify({'msg': 'Request rejected'}), 202
 
 
 @app.route("/team/<string:team_id>/delete-member", methods=["PATCH"])
 @jwt_required()
 def delete_member(team_id):
-    """Adds account to the pending field of a team."""
-    team_from_db = Team.query.where(Team.members.contains([get_jwt_identity()]) & (Team.team_id == team_id)).first()
+    """Deletes a member from a team and removes their association with a player. Required fields: account_id"""
+    team_from_db = db.session.execute(select(Team).where(Team.members.contains([get_jwt_identity()])
+                                                         & (Team.team_id == team_id))).scalar()
     if not team_from_db:
         return jsonify({'msg': 'Team not found (does it exist and are you a member?)'}), 404
     data = request.get_json()
     if data["account_id"] not in team_from_db.members:
         return jsonify({'msg': 'Member not found'}), 404
     team_from_db.members.remove(data["account_id"])
-    player = Player.query.filter_by(player_id=data["account_id"]).first()
+    player = db.session.execute(select(Player).filter_by(player_id=data["account_id"])).scalar()
     player.account = None
     db.session.merge(team_from_db)
     db.session.merge(player)
@@ -194,14 +182,16 @@ def delete_member(team_id):
 @app.route("/team/<string:team_id>/merge-member-player", methods=["PATCH"])
 @jwt_required()
 def merge_member_player(team_id):
-    """Adds your account to the pending field of a team."""
-    team_from_db = Team.query.where(Team.members.contains([get_jwt_identity()]) & (Team.team_id == team_id)).first()
+    """Associates a team member to a team player. Required fields: account_id, player_id."""
+    team_from_db = db.session.execute(select(Team).where(
+        Team.members.contains([get_jwt_identity()]) & (Team.team_id == team_id))).scalar()
     if not team_from_db:
         return jsonify({'msg': 'Team not found (does it exist and are you a member?)'}), 404
     data = request.get_json()
-    if data["account_id"] not in team_from_db.members and data["player_id"] not in col_to_set(db.session.query(Player.player_id).filter_by(team=team_id).all()):
+    if data["account_id"] not in team_from_db.members and data["player_id"] not in db.session.execute(
+            select(Player.player_id).filter_by(team=team_id)).scalars().all():
         return jsonify({'msg': 'Member or player not found'}), 404
-    player = Player.query.filter_by(player_id=data["account_id"]).first()
+    player = db.session.execute(select(Player).filter_by(player_id=data["player_id"])).scalar()
     if player.account == data["account_id"]:
         return jsonify({'msg': 'Member already associated with player'}), 202
     player.account = data["account_id"]
@@ -213,16 +203,21 @@ def merge_member_player(team_id):
 @app.route("/team/<string:team_id>/add-player", methods=["POST"])
 @jwt_required()
 def add_player(team_id):
-    """Adds a player"""
-    team_from_db = Team.query.where(Team.members.contains([get_jwt_identity()]) & (Team.team_id == team_id)).first()
+    """Adds a player to a team. Required fields: name, initial_rating, current_rating."""
+    team_from_db = db.session.execute(select(Team).where(Team.members.contains([get_jwt_identity()])
+                                                         & (Team.team_id == team_id))).scalar()
     if not team_from_db:
         return jsonify({'msg': 'Team not found (does it exist and are you a member?)'}), 404
     data = request.get_json()
-    player_from_db = Player.query.filter(or_(
-        Player.name == data["name"], Player.account == data.get("account") if data.get("account") else False)).first()
+    if data.get("account"):
+        player_from_db = db.session.execute(select(Player).where(
+            (Player.team == team_id) & ((Player.name == data["name"]) | (Player.account == data["account"])))).scalar()
+    else:
+        player_from_db = db.session.execute(select(Player).filter(
+            (Player.team == team_id) & (Player.name == data["name"]))).scalar()
     if player_from_db:
         return jsonify({'msg': 'Player already exists'}), 202
-    db.session.add(Player(**data))
+    db.session.add(Player(**data, team=team_id))
     db.session.commit()
     return jsonify({'msg': 'Player added successfully'}), 202
 
@@ -230,66 +225,72 @@ def add_player(team_id):
 @app.route("/team/<string:team_id>/add-match", methods=["POST"])
 @jwt_required()
 def add_match(team_id):
-    team_from_db = Team.query.where(Team.members.contains([get_jwt_identity()]) & (Team.team_id == team_id)).first()
+    """Adds match. Required fields: date"""
+    team_from_db = db.session.execute(select(Team).where(
+        Team.members.contains([get_jwt_identity()]) & (Team.team_id == team_id))).scalar()
     if not team_from_db:
         return jsonify({'msg': 'Team not found (does it exist and are you a member?)'}), 404
     data = request.get_json()
-    match_from_db = Match.query.filter((Match.team == team_id) & (Match.date == data["date"])).first()
+    match_from_db = db.session.execute(select(Match).where(
+        (Match.team == team_id) & (Match.date == data["date"]))).scalar()
     if match_from_db:
         return jsonify({'msg': 'Match already exists'}), 404
-    match = Match(**request.get_json(), team=team_from_db.team_id)
+    match = Match(**request.get_json(), team=team_id)
     db.session.add(match)
     db.session.commit()
     return jsonify({'msg': 'Match added successfully'}), 202
 
 
-@app.route("/team/<string:team_id>/remove-match", methods=["POST"])
-@jwt_required()
-def remove_match(team_id):
-    team_from_db = Team.query.where(Team.members.contains([get_jwt_identity()]) & (Team.team_id == team_id)).first()
-    if not team_from_db:
-        return jsonify({'msg': 'Team not found (does it exist and are you a member?)'}), 404
-    match_from_db = Match.query.filter_by(team=team_id).first()
-    if not match_from_db:
-        return jsonify({'msg': 'Match not found'}), 404
-    if match_from_db.winner is not None:
-        return jsonify({'msg': 'Match cannot be removed if the match winner has been declared'}), 404
-    match = Match(**request.get_json(), team=team_from_db.team_id)
-    db.session.delete(match)
-    db.session.commit()
-    return jsonify({'msg': 'Match deleted successfully'}), 202
-
-
-@app.route("/team/<string:team_id>/<string:match_id>", methods=["GET"])
+@app.route("/team/<string:team_id>/<string:match_id>", methods=["GET", "DELETE"])
 @jwt_required()
 def get_match(team_id, match_id):
-    team_from_db = Team.query.where(Team.members.contains([get_jwt_identity()]) & (Team.team_id == team_id)).first()
+    """Returns or deletes a match."""
+    team_from_db = db.session.execute(select(Team).where(
+        Team.members.contains([get_jwt_identity()]) & (Team.team_id == team_id))).scalar()
     if not team_from_db:
         return jsonify({'msg': 'Team not found (does it exist and are you a member?)'}), 404
-    match_from_db = Match.query.filter_by(match_id=match_id).first()
-    if not match_from_db:
-        return jsonify({'msg': 'Match not found'}), 404
-    joined_query = db.session.query(Player, Account).outerjoin(Account).filter(Player.team == team_id).all()
-    return jsonify({"match": match_from_db.to_json(), "players": [jsonify_join(join, exclude={'password', 'account'})
-                                                                  for join in joined_query]})
+    match_from_db = db.session.execute(select(Match).filter_by(match_id=match_id)).scalar()
+    if request.method == "GET":
+        if not match_from_db:
+            return jsonify({'msg': 'Match not found'}), 404
+        players = db.session.execute(select(Player).filter_by(team=team_id)).scalars().all()
+        return jsonify({"match": match_from_db.to_json(),
+                        "players": [player.to_json() for player in players],
+                        "team0": [player.to_json() for player in players if player.player_id in match_from_db.team0],
+                        "team1": [player.to_json() for player in players if player.player_id in match_from_db.team1],
+                        "pool": [player.to_json() for player in players if player.player_id in match_from_db.pool]
+                        }), 202
+    else:
+        if not match_from_db:
+            return jsonify({'msg': 'Match not found'}), 404
+        if match_from_db.winner is not None:
+            return jsonify({'msg': 'Match cannot be removed if the match winner has been declared'}), 404
+        match = Match(**request.get_json(), team=team_from_db.team_id)
+        db.session.delete(match)
+        db.session.commit()
+        return jsonify({'msg': 'Match deleted successfully'}), 202
 
 
-@app.route("/team/<string:team_id>/<string:match_id>/add-teams", methods=["PATCH"])
+@app.route("/team/<string:team_id>/<string:match_id>/update-teams", methods=["PATCH"])
 @jwt_required()
-def add_teams(team_id, match_id):
-    team_from_db = Team.query.where(Team.members.contains([get_jwt_identity()]) & (Team.team_id == team_id)).first()
+def update_teams(team_id, match_id):
+    """Updates the teams of a match. Required fields: team0, team1. Both are an array of player_ids."""
+    team_from_db = db.session.execute(select(Team).where(
+        Team.members.contains([get_jwt_identity()]) & (Team.team_id == team_id))).scalar()
     if not team_from_db:
         return jsonify({'msg': 'Team not found (does it exist and are you a member?)'}), 404
-    match_from_db = Match.query.filter_by(match_id=match_id).first()
+    match_from_db = db.session.execute(select(Match).filter_by(match_id=match_id)).scalar()
     if not match_from_db:
         return jsonify({'msg': 'Match not found'}), 404
     if match_from_db.winner is not None:
         return jsonify({'msg': 'Teams cannot be added if the match winner has been declared'}), 404
     data = request.get_json()
-    player_ids = col_to_set(db.session.query(Player.player_id).filter_by(team=team_id).all())
-    if not set(data["team0"]).issubset(player_ids) and not set(data["team1"]).issubset(player_ids):
+    names = db.session.execute(select(Player.player_id).filter_by(team=team_id)).scalars().all()
+    team0 = set(data["team0"])
+    team1 = set(data["team1"])
+    if not team0.issubset(names) and not team1.issubset(names):
         return jsonify({'msg': "Team0 and Team1 must be subsets of a team's players"}), 404
-    if not set(data["team0"]).isdisjoint(set(data["team1"])):
+    if not team0.isdisjoint(team1):
         return jsonify({'msg': 'Team0 and Team1 must be disjoint'}), 404
     match_from_db.team0 = data["team0"]
     match_from_db.team1 = data["team1"]
@@ -298,17 +299,19 @@ def add_teams(team_id, match_id):
     return jsonify({'msg': 'Teams added successfully'}), 202
 
 
-@app.route("/team/<string:team_id>/<string:match_id>/add-pool", methods=["PATCH"])
+@app.route("/team/<string:team_id>/<string:match_id>/update-pool", methods=["PATCH"])
 @jwt_required()
-def add_pool(team_id, match_id):
-    team_from_db = Team.query.where(Team.members.contains([get_jwt_identity()]) & (Team.team_id == team_id)).first()
+def update_pool(team_id, match_id):
+    """Updates the pool of a match. Required fields: pool. Pool is an array of player_ids."""
+    team_from_db = db.session.execute(select(Team).where(
+        Team.members.contains([get_jwt_identity()]) & (Team.team_id == team_id))).scalar()
     if not team_from_db:
         return jsonify({'msg': 'Team not found (does it exist and are you a member?)'}), 404
-    match_from_db = Match.query.filter_by(match_id=match_id).first()
+    match_from_db = db.session.execute(select(Match).filter_by(match_id=match_id)).scalar()
     if not match_from_db:
         return jsonify({'msg': 'Match not found'}), 404
     data = request.get_json()
-    player_ids = col_to_set(db.session.query(Player.player_id).filter_by(team=team_id).all())
+    player_ids = db.session.execute(select(Player.player_id).filter_by(team=team_id)).scalars().all()
     if not set(data["pool"]).issubset(player_ids):
         return jsonify({'msg': "Pool must be a subset of a team's players"}), 404
     match_from_db.pool = data["pool"]
@@ -320,23 +323,27 @@ def add_pool(team_id, match_id):
 @app.route("/team/<string:team_id>/<string:match_id>/calculate-teams", methods=["PATCH"])
 @jwt_required()
 def calculate_teams(team_id, match_id):
-    team_from_db = Team.query.where(Team.members.contains([get_jwt_identity()]) & (Team.team_id == team_id)).first()
+    """Calculates the fairest combination of teams."""
+    team_from_db = db.session.execute(select(Team).where(
+        Team.members.contains([get_jwt_identity()]) & (Team.team_id == team_id))).scalar()
     if not team_from_db:
         return jsonify({'msg': 'Team not found (does it exist and are you a member?)'}), 404
-    match_from_db = Match.query.filter_by(match_id=match_id).first()
+    match_from_db = db.session.execute(select(Match).filter_by(match_id=match_id)).scalar()
     if not match_from_db:
         return jsonify({'msg': 'Match not found'}), 404
     if match_from_db.winner is not None:
         return jsonify({'msg': 'Teams cannot be calculated if the match winner has been declared'}), 404
-    players = Player.query.where(Player.player_id.in_(match_from_db.pool)).all()
-    n = len(players)
-    m = n / 2
-    if n % 2 != 0:
+    players = db.session.execute(select(Player).filter_by(team=team_id)).scalars().all()
+    pool_size = len(players)
+    if pool_size % 2 != 0:
         return jsonify({'msg': 'Pool must be an equal number'}), 404
-    options = [f"{i:b}" for i in range(max_bits(n - 1), 2 ** n) if f"{i:b}".count("0") == m]
+    team_size = pool_size / 2
+    pool_range = range(pool_size)
+    options = [f"{i:b}" for i in range(max_bits(pool_size - 1), 2 ** pool_size) if f"{i:b}".count("0") == team_size]
     pool_ratings = [float(player.current_rating) for player in players]
-    team_ratings = [round(abs(sum([pool_ratings[i] for i in range(n) if bit[i] == "0"]) -
-                              sum([pool_ratings[i] for i in range(n) if bit[i] == "1"])), 1) for bit in options]
+
+    team_ratings = [round(abs(sum([pool_ratings[i] for i in pool_range if binary[i] == "0"]) -
+                              sum([pool_ratings[i] for i in pool_range if binary[i] == "1"])), 1) for binary in options]
     min_team_rating = min(team_ratings)
     parsed = [options[i] for i in range(len(options)) if team_ratings[i] == min_team_rating]
     teams = enumerate(choice(parsed))
@@ -351,50 +358,61 @@ def calculate_teams(team_id, match_id):
 @app.route("/team/<string:team_id>/<string:match_id>/declare-winner", methods=["PATCH"])
 @jwt_required()
 def declare_winner(team_id, match_id):
-    team_from_db = Team.query.where(Team.members.contains([get_jwt_identity()]) & (Team.team_id == team_id)).first()
+    """Declares a winner and increments the ratings of players in each team."""
+    team_from_db = db.session.execute(select(Team).where(
+        Team.members.contains([get_jwt_identity()]) & (Team.team_id == team_id))).scalar()
     if not team_from_db:
         return jsonify({'msg': 'Team not found (does it exist and are you a member?)'}), 404
-    match_from_db = Match.query.filter_by(match_id=match_id).first()
+    match_from_db = db.session.execute(select(Match).filter_by(match_id=match_id)).scalar()
     if not match_from_db:
         return jsonify({'msg': 'Match not found'}), 404
     if match_from_db.winner is not None:
         return jsonify({'msg': 'Match winner already declared'}), 404
-    winner = request.json()["winner"]
-    winners = match_from_db.team0 if winner else match_from_db.team1
-    losers = match_from_db.team1 if not winner else match_from_db.team0
-    for player in Player.query.where(Player.player_id.in_(winners)).all():
-        player.current_rating += 1
-        db.session.merge(player)
-    for player in Player.query.where(Player.player_id.in_(losers)).all():
-        player.current_rating -= 1
-        db.session.merge(player)
-    match_from_db.winner = request.json()["winner"]
-    db.session.merge(match_from_db)
+    winner = request.get_json()["winner"]
+    if winner == 0:
+        winners = match_from_db.team0
+        losers = match_from_db.team1
+    elif winner == 1:
+        winners = match_from_db.team1
+        losers = match_from_db.team0
+    else:
+        return jsonify({'msg': 'A match winner must be declared'}), 404
+    for player in db.session.execute(select(Player).where(Player.player_id.in_(winners))).scalars().all():
+        player.current_rating += Decimal('0.1')
+    for player in db.session.execute(select(Player).where(Player.player_id.in_(losers))).scalars().all():
+        player.current_rating -= Decimal('0.1')
+    match_from_db.winner = winner
     db.session.commit()
     return jsonify({'msg': 'Winner added and player ratings updated'}), 202
 
 
-@app.route("/team/<string:team_id>/<string:match_id>/undo-winner", methods=["PATCH"])
+@app.route("/team/<string:team_id>/<string:match_id>/remove-winner", methods=["PATCH"])
 @jwt_required()
-def undo_winner(team_id, match_id):
-    team_from_db = Team.query.where(Team.members.contains([get_jwt_identity()]) & (Team.team_id == team_id)).first()
+def remove_winner(team_id, match_id):
+    """Removes a winner and decrements the ratings of players in each team."""
+    team_from_db = db.session.execute(select(Team).where(
+        Team.members.contains([get_jwt_identity()]) & (Team.team_id == team_id))).scalar()
     if not team_from_db:
         return jsonify({'msg': 'Team not found (does it exist and are you a member?)'}), 404
-    match_from_db = Match.query.filter_by(match_id=match_id).first()
+    match_from_db = db.session.execute(select(Match).filter_by(match_id=match_id)).scalar()
     if not match_from_db:
         return jsonify({'msg': 'Match not found'}), 404
+    winner = match_from_db.winner
     if match_from_db.winner is None:
         return jsonify({'msg': 'Match winner not declared'}), 404
-    winners = match_from_db.team0 if match_from_db.winner else match_from_db.team1
-    losers = match_from_db.team1 if not match_from_db.winner else match_from_db.team0
-    for player in Player.query.where(Player.player_id.in_(winners)).all():
-        player.current_rating -= 1
-        db.session.merge(player)
-    for player in Player.query.where(Player.player_id.in_(losers)).all():
-        player.current_rating += 1
-        db.session.merge(player)
+    if winner == 0:
+        winners = match_from_db.team0
+        losers = match_from_db.team1
+    elif winner == 1:
+        winners = match_from_db.team1
+        losers = match_from_db.team0
+    else:
+        return jsonify({'msg': "A match winner hasn't been declared"}), 404
+    for player in db.session.execute(select(Player).where(Player.player_id.in_(winners))).scalars().all():
+        player.current_rating -= Decimal('0.1')
+    for player in db.session.execute(select(Player).where(Player.player_id.in_(losers))).scalars().all():
+        player.current_rating += Decimal('0.1')
     match_from_db.winner = None
-    db.session.merge(match_from_db)
     db.session.commit()
     return jsonify({'msg': 'Winner removed and player ratings reversed'}), 202
 
@@ -402,14 +420,6 @@ def undo_winner(team_id, match_id):
 def max_bits(b):
     """Returns the largest decimal number for a given bit length"""
     return (1 << b) - 1
-
-
-def jsonify_join(join, exclude):
-    return jsonable_encoder(join[0] if join[1] is None else vars(join[0]) | vars(join[1]), exclude=exclude, exclude_none=True)
-
-
-def col_to_set(query):
-    return {value for (value,) in query}
 
 
 if __name__ == '__main__':
