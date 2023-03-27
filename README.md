@@ -12,6 +12,25 @@ other)
 - We can then calculate the strength of every lineup and judge which is the most balanced
 
 
+The number of potential line-ups is given by ```n! / (2 * (n / 2)!) ```. The number of potential line-ups for a given 
+pool size is listed below:
+
+<table>
+<tr> <td> pool size </td> <td> potential line-ups </td> </tr>
+<tr> <td> 2 </td> <td> 1 </td> </tr>
+<tr> <td> 4 </td> <td> 3 </td> </tr>
+<tr> <td> 6 </td> <td> 10 </td> </tr>
+<tr> <td> 8 </td> <td> 35 </td> </tr>
+<tr> <td> 10 </td> <td> 126 </td> </tr>
+<tr> <td> 12 </td> <td> 426 </td> </tr>
+<tr> <td> 14 </td> <td> 1716 </td> </tr>
+<tr> <td> 16 </td> <td> 6435 </td> </tr>
+<tr> <td> 18 </td> <td> 24310 </td> </tr>
+<tr> <td> 20 </td> <td> 92378 </td> </tr>
+<tr> <td> 22 </td> <td> 352716 </td> </tr>
+</table>
+
+
 ### Example
 
 There are four players in the pool represented by the following json:
