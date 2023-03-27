@@ -12,7 +12,7 @@ other)
 - We can then calculate the strength of every lineup and judge which is the most balanced
 
 
-The number of potential line-ups is given by ```n! / (2 * (n / 2)!) ```. The number of potential line-ups for a given 
+The number of potential line-ups is given by ```(n! / 2) / (n / 2)! ** 2 ```. The number of potential line-ups for a given 
 pool size is listed below:
 
 <table>
