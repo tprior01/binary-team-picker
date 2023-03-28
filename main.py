@@ -75,7 +75,7 @@ def account():
     account_from_db = db.session.execute(select(Account).filter_by(account_id=get_jwt_identity())).scalar()
     if not account_from_db:
         return jsonify({'msg': 'Account not found'}), 404
-    if request.method == "POST":
+    if request.method == "GET":
         teams = db.session.execute(select(Team).where(Team.members.contains([get_jwt_identity()]))).scalars().all()
         return jsonify({"account": account_from_db.to_json()}, {"teams": [team.to_json() for team in teams]}), 200
     else:
