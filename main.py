@@ -1,7 +1,7 @@
 from os import getenv
 from hashlib import sha256
 from datetime import timedelta
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, make_response, redirect, url_for
 from flask_jwt_extended import JWTManager, create_access_token, unset_jwt_cookies, set_access_cookies, jwt_required, get_jwt_identity
 from sqlalchemy import select
 from random import choice
@@ -41,7 +41,6 @@ def binary_options(pool_size, team_size):
 
 @app.route("/", methods=["GET"])
 def hello_world():
-    # return jsonify({'msg': 'hello world'}), 200
     return render_template('index.html', msg='hello world')
 
 
@@ -74,9 +73,9 @@ def login():
             encrypted_password = sha256(data['password'].encode("utf-8")).hexdigest()
             if encrypted_password == account_from_db.password:
                 access_token = create_access_token(identity=account_from_db.account_id)
-                response = jsonify({'msg': 'Login successful'})
+                response = make_response(redirect(url_for('account'), 302))
                 set_access_cookies(response, access_token)
-                return render_template('index.html')
+                return response
         return jsonify({'msg': 'The username or password is incorrect'}), 401
 
 
@@ -95,7 +94,7 @@ def account():
     account_from_db = db.session.execute(select(Account).filter_by(account_id=get_jwt_identity())).scalar()
     if not account_from_db:
         return jsonify({'msg': 'Account not found'}), 404
-    if request.method == "POST":
+    if request.method == "GET":
         teams = db.session.execute(select(Team).where(Team.members.contains([get_jwt_identity()]))).scalars().all()
         return jsonify({"account": account_from_db.to_json()}, {"teams": [team.to_json() for team in teams]}), 200
     else:
