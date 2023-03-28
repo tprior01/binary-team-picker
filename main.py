@@ -364,9 +364,9 @@ def calculate_teams(team_id, match_id):
                               sum([pool_ratings[i] for i in pool_range if binary[i] == "1"])), 1) for binary in options]
     min_team_rating = min(team_ratings)
     parsed = [options[i] for i in range(len(options)) if team_ratings[i] == min_team_rating]
-    teams = enumerate(choice(parsed))
-    match_from_db.team0 = [players[i].player_id for i, bit in teams if bit == "0"]
-    match_from_db.team1 = [players[i].player_id for i, bit in teams if bit == "1"]
+    teams = choice(parsed)
+    match_from_db.team0 = [players[i].player_id for i, bit in enumerate(teams) if bit == "0"]
+    match_from_db.team1 = [players[i].player_id for i, bit in enumerate(teams) if bit == "1"]
     db.session.merge(match_from_db)
     db.session.commit()
     return jsonify({'msg': 'Teams calculated and updated successfully', 'total options': len(options),
