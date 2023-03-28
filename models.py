@@ -10,7 +10,6 @@ db = SQLAlchemy()
 
 class Account(db.Model):
     account_id = Column(Integer, primary_key=True)
-    name = Column(String(80), nullable=False)
     email = Column(String(150), nullable=False)
     password = Column(String(255), nullable=False)
 
