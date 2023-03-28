@@ -2,8 +2,12 @@
 
 ### Overview
 
-A flask application used to pick balanced football teams from a pool of available players. For a pool of size n there 
-are $\\frac{n!}{2(n / 2)!^2}$ team combinations, which can be represented by every binary number of n digits that has an even number of 0s and 1s. That's 426 combinations for my weekly six-a-side team or 35271 combinations for two eleven-a-side teams. Each week the rating of the winners are incremented and the losers decremented. From this the scores of every team combination can be compared and only the lowest and therefore fairest team combinations are considered. 
+A flask application used to pick balanced football teams from a pool of available players. For a pool of size ```n``` there 
+are $\\frac{n!}{2(n / 2)!^2}$ team combinations, which can be represented by every binary number of ```n``` digits that has an 
+even number of ```0```s and ```1```s. That's 426 combinations for my weekly six-a-side team or 35271 combinations for two 
+eleven-a-side teams. Each week the rating of the winners are incremented and the losers decremented. From this the 
+scores of every team combination can be compared and only the lowest and therefore fairest team combinations are 
+considered. 
 
 The table below shows the number of potential line-ups for a given pool size:
 
