@@ -46,10 +46,10 @@ def hello_world():
 
 
 @app.route("/register", methods=["GET", "POST"])
-def register_post():
+def register():
     """Registers an account. Required fields: name, email, password."""
     if request.method == "GET":
-        return render_template('register.html', msg='test')
+        return render_template('register.html')
     else:
         data = request.form.to_dict()
         account_from_db = db.session.execute(select(Account).filter_by(email=data["email"])).scalar()
@@ -57,24 +57,27 @@ def register_post():
             data["password"] = sha256(data["password"].encode("utf-8")).hexdigest()
             db.session.add(Account(**data))
             db.session.commit()
-            return render_template('register.html', msg='test')
+            return render_template('index.html')
         else:
             return jsonify({'msg': 'Email already in use'}), 404
 
 
-@app.route("/login", methods=["POST"])
+@app.route("/login", methods=["GET", "POST"])
 def login():
     """Returns a json web token. Required fields: email, password."""
-    data = request.get_json()
-    account_from_db = db.session.execute(select(Account).filter_by(email=data["email"])).scalar()
-    if account_from_db:
-        encrypted_password = sha256(data['password'].encode("utf-8")).hexdigest()
-        if encrypted_password == account_from_db.password:
-            access_token = create_access_token(identity=account_from_db.account_id)
-            response = jsonify({'msg': 'Login successful'})
-            set_access_cookies(response, access_token)
-            return response, 200
-    return jsonify({'msg': 'The username or password is incorrect'}), 401
+    if request.method == "GET":
+        return render_template('login.html', msg='test')
+    else:
+        data = request.form.to_dict()
+        account_from_db = db.session.execute(select(Account).filter_by(email=data["email"])).scalar()
+        if account_from_db:
+            encrypted_password = sha256(data['password'].encode("utf-8")).hexdigest()
+            if encrypted_password == account_from_db.password:
+                access_token = create_access_token(identity=account_from_db.account_id)
+                response = jsonify({'msg': 'Login successful'})
+                set_access_cookies(response, access_token)
+                return render_template('index.html')
+        return jsonify({'msg': 'The username or password is incorrect'}), 401
 
 
 @app.route("/logout", methods=["POST"])
