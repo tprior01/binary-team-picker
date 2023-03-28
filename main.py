@@ -1,7 +1,7 @@
 from os import getenv
 from hashlib import sha256
 from datetime import timedelta
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from sqlalchemy import select
 from random import choice
@@ -11,9 +11,9 @@ from decimal import Decimal
 app = Flask(__name__)
 
 
-# from dotenv import load_dotenv
-# load_dotenv()
-# app.config['SQLALCHEMY_ECHO'] = True
+from dotenv import load_dotenv
+load_dotenv()
+app.config['SQLALCHEMY_ECHO'] = True
 
 
 app.config["SQLALCHEMY_DATABASE_URI"] = getenv("SQLALCHEMY_DATABASE_URI")
@@ -139,8 +139,8 @@ def join_team(team_id):
 @jwt_required()
 def process_request(team_id):
     """Adds member to team or deletes member request. Required fields: account_id. Optional field: player_id."""
-    team_from_db = db.session.execute(select(Team).where(Team.members.contains([get_jwt_identity()])
-                                                         & (Team.team_id == team_id))).scalar()
+    team_from_db = db.session.execute(select(Team).where(
+        Team.members.contains([get_jwt_identity()]) & (Team.team_id == team_id))).scalar()
     if not team_from_db:
         return jsonify({'msg': 'Team not found (does it exist and are you a member?)'}), 404
     data = request.get_json()
@@ -173,8 +173,8 @@ def process_request(team_id):
 @jwt_required()
 def delete_member(team_id):
     """Deletes a member from a team and removes their association with a player. Required fields: account_id"""
-    team_from_db = db.session.execute(select(Team).where(Team.members.contains([get_jwt_identity()])
-                                                         & (Team.team_id == team_id))).scalar()
+    team_from_db = db.session.execute(select(Team).where(
+        Team.members.contains([get_jwt_identity()]) & (Team.team_id == team_id))).scalar()
     if not team_from_db:
         return jsonify({'msg': 'Team not found (does it exist and are you a member?)'}), 404
     data = request.get_json()
@@ -214,8 +214,8 @@ def merge_member_player(team_id):
 @jwt_required()
 def add_player(team_id):
     """Adds a player to a team. Required fields: name, initial_rating, current_rating."""
-    team_from_db = db.session.execute(select(Team).where(Team.members.contains([get_jwt_identity()])
-                                                         & (Team.team_id == team_id))).scalar()
+    team_from_db = db.session.execute(select(Team).where(
+        Team.members.contains([get_jwt_identity()]) & (Team.team_id == team_id))).scalar()
     if not team_from_db:
         return jsonify({'msg': 'Team not found (does it exist and are you a member?)'}), 404
     data = request.get_json()
@@ -365,7 +365,7 @@ def calculate_teams(team_id, match_id):
                     'parsed options': len(parsed)}), 202
 
 
-@app.route("/team/<string:team_id>/<string:match_id>/declare-winner", methods=["PATCH"])
+@app.route("/team/<string:team_id>/<string:match_id>/declare-winner", methods=["PATCH", "DELETE"])
 @jwt_required()
 def declare_winner(team_id, match_id):
     """Declares a winner and increments the ratings of players in each team."""
@@ -376,9 +376,18 @@ def declare_winner(team_id, match_id):
     match_from_db = db.session.execute(select(Match).filter_by(match_id=match_id)).scalar()
     if not match_from_db:
         return jsonify({'msg': 'Match not found'}), 404
-    if match_from_db.winner is not None:
-        return jsonify({'msg': 'Match winner already declared'}), 404
-    winner = request.get_json()["winner"]
+    if request.method == "PATCH":
+        if match_from_db.winner is not None:
+            return jsonify({'msg': 'Match winner already declared'}), 404
+        winner = request.get_json()["winner"]
+        increment = Decimal('0.1')
+        match_from_db.winner = winner
+    else:
+        winner = match_from_db.winner
+        if match_from_db.winner is None:
+            return jsonify({'msg': 'Match winner not declared'}), 404
+        increment = Decimal('-0.1')
+        match_from_db.winner = None
     if winner == 0:
         winners = match_from_db.team0
         losers = match_from_db.team1
@@ -386,45 +395,13 @@ def declare_winner(team_id, match_id):
         winners = match_from_db.team1
         losers = match_from_db.team0
     else:
-        return jsonify({'msg': 'A match winner must be declared'}), 404
+        return jsonify({'msg': 'A match winner must be a 0 or 1'}), 404
     for player in db.session.execute(select(Player).where(Player.player_id.in_(winners))).scalars().all():
-        player.current_rating += Decimal('0.1')
+        player.current_rating += increment
     for player in db.session.execute(select(Player).where(Player.player_id.in_(losers))).scalars().all():
-        player.current_rating -= Decimal('0.1')
-    match_from_db.winner = winner
+        player.current_rating -= increment
     db.session.commit()
-    return jsonify({'msg': 'Winner added and player ratings updated'}), 202
-
-
-@app.route("/team/<string:team_id>/<string:match_id>/remove-winner", methods=["PATCH"])
-@jwt_required()
-def remove_winner(team_id, match_id):
-    """Removes a winner and decrements the ratings of players in each team."""
-    team_from_db = db.session.execute(select(Team).where(
-        Team.members.contains([get_jwt_identity()]) & (Team.team_id == team_id))).scalar()
-    if not team_from_db:
-        return jsonify({'msg': 'Team not found (does it exist and are you a member?)'}), 404
-    match_from_db = db.session.execute(select(Match).filter_by(match_id=match_id)).scalar()
-    if not match_from_db:
-        return jsonify({'msg': 'Match not found'}), 404
-    winner = match_from_db.winner
-    if match_from_db.winner is None:
-        return jsonify({'msg': 'Match winner not declared'}), 404
-    if winner == 0:
-        winners = match_from_db.team0
-        losers = match_from_db.team1
-    elif winner == 1:
-        winners = match_from_db.team1
-        losers = match_from_db.team0
-    else:
-        return jsonify({'msg': "A match winner hasn't been declared"}), 404
-    for player in db.session.execute(select(Player).where(Player.player_id.in_(winners))).scalars().all():
-        player.current_rating -= Decimal('0.1')
-    for player in db.session.execute(select(Player).where(Player.player_id.in_(losers))).scalars().all():
-        player.current_rating += Decimal('0.1')
-    match_from_db.winner = None
-    db.session.commit()
-    return jsonify({'msg': 'Winner removed and player ratings reversed'}), 202
+    return jsonify({'msg': 'Winner added and player ratings updated'}), 200
 
 
 if __name__ == '__main__':
