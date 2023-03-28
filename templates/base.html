@@ -1,0 +1,43 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %} {% endblock %} - binary-team-picker</title>
+    <style>
+        .message {
+            padding: 10px;
+            margin: 5px;
+            background-color:
+            color: #fff;
+            font-family: rainyhearts;
+        }
+        nav a {
+            color: #03a9f4;
+            font-size: 2em;
+            margin-left: 50px;
+            text-decoration: none;
+            font-family: rainyhearts;
+        }
+        @font-face {
+            font-family: 'rainyhearts';
+            src: url('./static/fonts/rainyhearts.ttf') format('truetype');
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="/">binary-team-picker</a>
+        <a href="/">about</a>
+        <a href="/">login</a>
+        <a href="/register">register</a>
+        <a href="/account">account</a>
+
+
+    </nav>
+    <hr>
+    <div class="content">
+        {% block content %} {% endblock %}
+    </div>
+</body>
+</html>

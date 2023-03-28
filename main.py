@@ -1,8 +1,8 @@
 from os import getenv
 from hashlib import sha256
 from datetime import timedelta
-from flask import Flask, request, jsonify
-from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
+from flask import Flask, request, jsonify, render_template
+from flask_jwt_extended import JWTManager, create_access_token, unset_jwt_cookies, set_access_cookies, jwt_required, get_jwt_identity
 from sqlalchemy import select
 from random import choice
 from models import db, Account, Team, Player, Match
@@ -20,7 +20,10 @@ app.config["SQLALCHEMY_DATABASE_URI"] = getenv("SQLALCHEMY_DATABASE_URI")
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['JWT_SECRET_KEY'] = getenv("SECRET_KEY")
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)
-app.config['JWT_TOKEN_LOCATION'] = ['headers', 'query_string']
+app.config["JWT_TOKEN_LOCATION"] = ["headers", "cookies", "json", "query_string"]
+app.config["JWT_COOKIE_SECURE"] = False
+app.config['JWT_COOKIE_CSRF_PROTECT'] = True
+app.config['JWT_CSRF_CHECK_FORM'] = True
 
 db.init_app(app)
 jwt = JWTManager(app)
@@ -38,21 +41,25 @@ def binary_options(pool_size, team_size):
 
 @app.route("/", methods=["GET"])
 def hello_world():
-    return jsonify({'msg': 'hello world'}), 200
+    # return jsonify({'msg': 'hello world'}), 200
+    return render_template('index.html', msg='hello world')
 
 
-@app.route("/register", methods=["POST"])
-def register():
+@app.route("/register", methods=["GET", "POST"])
+def register_post():
     """Registers an account. Required fields: name, email, password."""
-    data = request.get_json()
-    account_from_db = db.session.execute(select(Account).filter_by(email=data["email"])).scalar()
-    if not account_from_db:
-        data["password"] = sha256(data["password"].encode("utf-8")).hexdigest()
-        db.session.add(Account(**data))
-        db.session.commit()
-        return jsonify({'msg': 'Account created successfully'}), 201
+    if request.method == "GET":
+        return render_template('register.html', msg='test')
     else:
-        return jsonify({'msg': 'Email already in use'}), 409
+        data = request.form.to_dict()
+        account_from_db = db.session.execute(select(Account).filter_by(email=data["email"])).scalar()
+        if not account_from_db:
+            data["password"] = sha256(data["password"].encode("utf-8")).hexdigest()
+            db.session.add(Account(**data))
+            db.session.commit()
+            return render_template('register.html', msg='test')
+        else:
+            return jsonify({'msg': 'Email already in use'}), 404
 
 
 @app.route("/login", methods=["POST"])
@@ -64,8 +71,18 @@ def login():
         encrypted_password = sha256(data['password'].encode("utf-8")).hexdigest()
         if encrypted_password == account_from_db.password:
             access_token = create_access_token(identity=account_from_db.account_id)
-            return jsonify(access_token=access_token), 200
+            response = jsonify({'msg': 'Login successful'})
+            set_access_cookies(response, access_token)
+            return response, 200
     return jsonify({'msg': 'The username or password is incorrect'}), 401
+
+
+@app.route("/logout", methods=["POST"])
+def logout():
+    """Returns a json web token. Required fields: email, password."""
+    response = jsonify({'msg': 'Logout successful'})
+    unset_jwt_cookies(response)
+    return response, 200
 
 
 @app.route("/account", methods=["GET", "DELETE"])
@@ -343,8 +360,9 @@ def calculate_teams(team_id, match_id):
         return jsonify({'msg': 'Match not found'}), 404
     if match_from_db.winner is not None:
         return jsonify({'msg': 'Teams cannot be calculated if the match winner has been declared'}), 404
-    players = db.session.execute(select(Player).filter_by(team=team_id)).scalars().all()
+    players = db.session.execute(select(Player).where(Player.player_id.in_(match_from_db.pool))).scalars().all()
     pool_size = len(players)
+    print(pool_size)
     if pool_size % 2 != 0:
         return jsonify({'msg': 'Pool must be an equal number'}), 404
     team_size = pool_size / 2
@@ -356,9 +374,9 @@ def calculate_teams(team_id, match_id):
                               sum([pool_ratings[i] for i in pool_range if binary[i] == "1"])), 1) for binary in options]
     min_team_rating = min(team_ratings)
     parsed = [options[i] for i in range(len(options)) if team_ratings[i] == min_team_rating]
-    teams = enumerate(choice(parsed))
-    match_from_db.team0 = [players[i].account_id for i, bit in teams if bit == "0"]
-    match_from_db.team1 = [players[i].account_id for i, bit in teams if bit == "1"]
+    teams = choice(parsed)
+    match_from_db.team0 = [players[i].player_id for i, bit in enumerate(teams) if bit == "0"]
+    match_from_db.team1 = [players[i].player_id for i, bit in enumerate(teams) if bit == "1"]
     db.session.merge(match_from_db)
     db.session.commit()
     return jsonify({'msg': 'Teams calculated and updated successfully', 'total options': len(options),
