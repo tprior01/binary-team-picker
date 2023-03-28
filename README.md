@@ -2,18 +2,10 @@
 
 ### Overview
 
-This API is used to pick two balanced football teams from a pool of available players.
-- Each player is assigned a rating 
-- The rating is incremented up for a win and down for a loss
-- Every possible line-up of players is represented by the binary numbers which have ```n``` digits and ```n / 2``` 
-zeros and ones, where ```n``` is the number of players in the pool and ```n % 2 = 0```
-- The binary number is an index representing the two teams (```0```s representing one team, ```1```s representing the 
-other)
-- We can then calculate the strength of every lineup and judge which is the most balanced
+A flask application used to pick balanced football teams from a pool of available players. For a pool of size n there 
+are $\\frac{n!}{2(n / 2)!^2}$ team combinations, which can be represented by every binary number of n digits that has an even number of 0s and 1s. That's 426 combinations for my weekly six-a-side team or 35271 combinations for two eleven-a-side teams. Each week the rating of the winners are incremented and the losers decremented. From this the scores of every team combination can be compared and only the lowest and therefore fairest team combinations are considered. 
 
-
-The number of potential line-ups is given by ```(n! / 2) / (n / 2)! ** 2 ```. The number of potential line-ups for a given 
-pool size is listed below:
+The table below shows the number of potential line-ups for a given pool size:
 
 <table>
 <tr> <td> pool size </td> <td> potential line-ups </td> </tr>
