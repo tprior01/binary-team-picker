@@ -23,7 +23,7 @@ app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)
 app.config['JWT_TOKEN_LOCATION'] = ['headers', 'query_string']
 app.config["JWT_TOKEN_LOCATION"] = ["headers", "cookies", "json", "query_string"]
 app.config["JWT_COOKIE_SECURE"] = False
-app.config['JWT_COOKIE_CSRF_PROTECT'] = True
+app.config['JWT_COOKIE_CSRF_PROTECT'] = False
 app.config['JWT_CSRF_CHECK_FORM'] = True
 
 
@@ -351,7 +351,7 @@ def calculate_teams(team_id, match_id):
         return jsonify({'msg': 'Match not found'}), 404
     if match_from_db.winner is not None:
         return jsonify({'msg': 'Teams cannot be calculated if the match winner has been declared'}), 404
-    players = db.session.execute(select(Player).filter_by(team=team_id)).scalars().all()
+    players = db.session.execute(select(Player).where(Player.player_id.in_(match_from_db.pool))).scalars().all()
     pool_size = len(players)
     if pool_size % 2 != 0:
         return jsonify({'msg': 'Pool must be an equal number'}), 404
@@ -365,8 +365,8 @@ def calculate_teams(team_id, match_id):
     min_team_rating = min(team_ratings)
     parsed = [options[i] for i in range(len(options)) if team_ratings[i] == min_team_rating]
     teams = enumerate(choice(parsed))
-    match_from_db.team0 = [players[i].account_id for i, bit in teams if bit == "0"]
-    match_from_db.team1 = [players[i].account_id for i, bit in teams if bit == "1"]
+    match_from_db.team0 = [players[i].player_id for i, bit in teams if bit == "0"]
+    match_from_db.team1 = [players[i].player_id for i, bit in teams if bit == "1"]
     db.session.merge(match_from_db)
     db.session.commit()
     return jsonify({'msg': 'Teams calculated and updated successfully', 'total options': len(options),
