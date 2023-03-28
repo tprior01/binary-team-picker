@@ -37,28 +37,26 @@ There are four players in the pool represented by the following json:
 
 ```json
 {
-  "pool": {
-    "player1": {
-      "name": "tom",
-      "rating": 4.9
-    },
-    "player2": {
-      "name": "harry",
-      "rating": 5.0
-    },
-    "player3": {
-      "name": "richard",
-      "rating": 4.8
-    },
-    "player4": {
-      "name": "elaine",
-      "rating": 5.1
-    }
-  }
+"player1": {
+  "name": "tom",
+  "rating": 4.9
+},
+"player2": {
+  "name": "harry",
+  "rating": 5.0
+},
+"player3": {
+  "name": "richard",
+  "rating": 4.8
+},
+"player4": {
+  "name": "elaine",
+  "rating": 5.1
+}
 }
 ```
 
-The binary numbers ```1001, 1010``` and ```1100``` represent all possible line-ups. The scores of each team member are 
+The binary numbers ```1001```, ```1010``` and ```1100``` represent all possible line-ups. The scores of each team member are 
 summed to get a team rating. The difference between the ratings of each team are compared and only the line-ups with the 
 lowest difference are considered. 
 
