@@ -64,7 +64,7 @@ def login():
         encrypted_password = sha256(data['password'].encode("utf-8")).hexdigest()
         if encrypted_password == account_from_db.password:
             access_token = create_access_token(identity=account_from_db.account_id)
-            return jsonify(access_token=access_token), 200
+            return jsonify(access_token=access_token), 201
     return jsonify({'msg': 'The username or password is incorrect'}), 401
 
 
@@ -81,6 +81,7 @@ def account():
     else:
         db.session.delete(account_from_db)
         db.session.commit()
+        return jsonify({'msg': 'Account deleted'}), 401
 
 
 @app.route("/register-team", methods=["POST"])
@@ -91,7 +92,7 @@ def register_team():
     team_from_db = db.session.execute(select(Team).where(
         Team.members.contains([get_jwt_identity()]) & (Team.name == data["name"]))).scalar()
     if team_from_db:
-        return jsonify({'msg': 'Team already exists'}), 404
+        return jsonify({'msg': 'Team already exists'}), 409
     team = Team(**data, members=[get_jwt_identity()])
     db.session.add(team)
     db.session.commit()
@@ -132,7 +133,7 @@ def join_team(team_id):
     team_from_db.pending.append(get_jwt_identity())
     db.session.merge(team_from_db)
     db.session.commit()
-    return jsonify({'msg': 'Requested to join team successfully'}), 202
+    return jsonify({'msg': 'Requested to join team successfully'}), 200
 
 
 @app.route("/team/<string:team_id>/process-request", methods=["PATCH", "DELETE"])
@@ -150,7 +151,7 @@ def process_request(team_id):
             team_from_db.members.append(data["account_id"])
             db.session.merge(team_from_db)
             db.session.commit()
-            return jsonify({'msg': 'Member added successfully'}), 202
+            return jsonify({'msg': 'Member added successfully'}), 200
         elif data["account_id"] in team_from_db.pending and data["account_id"] in team_from_db.pending:
             team_from_db.pending.remove(data["account_id"])
             team_from_db.members.append(data["account_id"])
@@ -159,14 +160,14 @@ def process_request(team_id):
             db.session.merge(team_from_db)
             db.session.merge(player_from_db)
             db.session.commit()
-            return jsonify({'msg': 'Member added successfully and associated to player'}), 202
+            return jsonify({'msg': 'Member added successfully and associated to player'}), 200
         else:
             return jsonify({'msg': 'Request not found'}), 404
     else:
         team_from_db.pending.remove(data["account_id"])
         db.session.merge(team_from_db)
         db.session.commit()
-        return jsonify({'msg': 'Request rejected'}), 202
+        return jsonify({'msg': 'Request rejected'}), 200
 
 
 @app.route("/team/<string:team_id>/delete-member", methods=["PATCH"])
@@ -186,7 +187,7 @@ def delete_member(team_id):
     db.session.merge(team_from_db)
     db.session.merge(player)
     db.session.commit()
-    return jsonify({'msg': 'Member deleted successfully'}), 202
+    return jsonify({'msg': 'Member deleted successfully'}), 200
 
 
 @app.route("/team/<string:team_id>/merge-member-player", methods=["PATCH"])
@@ -203,11 +204,11 @@ def merge_member_player(team_id):
         return jsonify({'msg': 'Member or player not found'}), 404
     player = db.session.execute(select(Player).filter_by(player_id=data["player_id"])).scalar()
     if player.account == data["account_id"]:
-        return jsonify({'msg': 'Member already associated with player'}), 202
+        return jsonify({'msg': 'Member already associated with player'}), 200
     player.account = data["account_id"]
     db.session.merge(player)
     db.session.commit()
-    return jsonify({'msg': 'Member associated with player successfully'}), 202
+    return jsonify({'msg': 'Member associated with player successfully'}), 200
 
 
 @app.route("/team/<string:team_id>/add-player", methods=["POST"])
@@ -226,10 +227,10 @@ def add_player(team_id):
         player_from_db = db.session.execute(select(Player).filter(
             (Player.team == team_id) & (Player.name == data["name"]))).scalar()
     if player_from_db:
-        return jsonify({'msg': 'Player already exists'}), 202
+        return jsonify({'msg': 'Player already exists'}), 200
     db.session.add(Player(**data, team=team_id))
     db.session.commit()
-    return jsonify({'msg': 'Player added successfully'}), 202
+    return jsonify({'msg': 'Player added successfully'}), 200
 
 
 @app.route("/team/<string:team_id>/add-match", methods=["POST"])
@@ -248,7 +249,7 @@ def add_match(team_id):
     match = Match(**request.get_json(), team=team_id)
     db.session.add(match)
     db.session.commit()
-    return jsonify({'msg': 'Match added successfully'}), 202
+    return jsonify({'msg': 'Match added successfully'}), 200
 
 
 @app.route("/team/<string:team_id>/<string:match_id>", methods=["GET", "DELETE"])
@@ -269,7 +270,7 @@ def get_match(team_id, match_id):
                         "team0": [player.to_json() for player in players if player.player_id in match_from_db.team0],
                         "team1": [player.to_json() for player in players if player.player_id in match_from_db.team1],
                         "pool": [player.to_json() for player in players if player.player_id in match_from_db.pool]
-                        }), 202
+                        }), 200
     else:
         if not match_from_db:
             return jsonify({'msg': 'Match not found'}), 404
@@ -278,7 +279,7 @@ def get_match(team_id, match_id):
         match = Match(**request.get_json(), team=team_from_db.team_id)
         db.session.delete(match)
         db.session.commit()
-        return jsonify({'msg': 'Match deleted successfully'}), 202
+        return jsonify({'msg': 'Match deleted successfully'}), 200
 
 
 @app.route("/team/<string:team_id>/<string:match_id>/update-teams", methods=["PATCH"])
@@ -306,7 +307,7 @@ def update_teams(team_id, match_id):
     match_from_db.team1 = data["team1"]
     db.session.merge(match_from_db)
     db.session.commit()
-    return jsonify({'msg': 'Teams added successfully'}), 202
+    return jsonify({'msg': 'Teams added successfully'}), 200
 
 
 @app.route("/team/<string:team_id>/<string:match_id>/update-pool", methods=["PATCH"])
@@ -327,7 +328,7 @@ def update_pool(team_id, match_id):
     match_from_db.pool = data["pool"]
     db.session.merge(match_from_db)
     db.session.commit()
-    return jsonify({'msg': 'Pool added successfully'}), 202
+    return jsonify({'msg': 'Pool added successfully'}), 200
 
 
 @app.route("/team/<string:team_id>/<string:match_id>/calculate-teams", methods=["PATCH"])
@@ -362,7 +363,7 @@ def calculate_teams(team_id, match_id):
     db.session.merge(match_from_db)
     db.session.commit()
     return jsonify({'msg': 'Teams calculated and updated successfully', 'total options': len(options),
-                    'parsed options': len(parsed)}), 202
+                    'parsed options': len(parsed)}), 200
 
 
 @app.route("/team/<string:team_id>/<string:match_id>/declare-winner", methods=["PATCH", "DELETE"])
