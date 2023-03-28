@@ -1,8 +1,8 @@
 from os import getenv
 from hashlib import sha256
 from datetime import timedelta
-from flask import Flask, request, jsonify
-from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
+from flask import Flask, request, jsonify, make_response
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity, set_access_cookies
 from sqlalchemy import select
 from random import choice
 from models import db, Account, Team, Player, Match
@@ -21,6 +21,11 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['JWT_SECRET_KEY'] = getenv("SECRET_KEY")
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)
 app.config['JWT_TOKEN_LOCATION'] = ['headers', 'query_string']
+app.config["JWT_TOKEN_LOCATION"] = ["headers", "cookies", "json", "query_string"]
+app.config["JWT_COOKIE_SECURE"] = False
+app.config['JWT_COOKIE_CSRF_PROTECT'] = True
+app.config['JWT_CSRF_CHECK_FORM'] = True
+
 
 db.init_app(app)
 jwt = JWTManager(app)
@@ -64,7 +69,9 @@ def login():
         encrypted_password = sha256(data['password'].encode("utf-8")).hexdigest()
         if encrypted_password == account_from_db.password:
             access_token = create_access_token(identity=account_from_db.account_id)
-            return jsonify(access_token=access_token), 201
+            response = make_response({'msg': 'Logged in successfully'}, 200)
+            set_access_cookies(response, access_token)
+            return response
     return jsonify({'msg': 'The username or password is incorrect'}), 401
 
 
