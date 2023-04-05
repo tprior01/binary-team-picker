@@ -7,14 +7,13 @@ from sqlalchemy import select
 from random import choice
 from models import db, Account, Team, Player, Match
 from decimal import Decimal
-from flask_marshmallow import Marshmallow, Schema, fields
 
 app = Flask(__name__)
 
 
-from dotenv import load_dotenv
-load_dotenv()
-app.config['SQLALCHEMY_ECHO'] = True
+# from dotenv import load_dotenv
+# load_dotenv()
+# app.config['SQLALCHEMY_ECHO'] = True
 
 
 app.config["SQLALCHEMY_DATABASE_URI"] = getenv("SQLALCHEMY_DATABASE_URI")
@@ -30,13 +29,6 @@ app.config['JWT_CSRF_CHECK_FORM'] = True
 
 db.init_app(app)
 jwt = JWTManager(app)
-ma = Marshmallow(app)
-
-
-# class Auth(Schema):
-#     email = fields.Strin(required=True)
-#     password = fields.Str(required=True)
-#
 
 
 def max_bits(b):
@@ -424,6 +416,9 @@ def declare_winner(team_id, match_id):
     elif winner == 1:
         winners = match_from_db.team1
         losers = match_from_db.team0
+    elif winner == -1:
+        db.session.commit()
+        return jsonify({'msg': 'Draw added, no player ratings are changed'}), 200
     else:
         return jsonify({'msg': 'A match winner must be a 0 or 1'}), 404
     for player in db.session.execute(select(Player).where(Player.player_id.in_(winners))).scalars().all():
