@@ -7,6 +7,7 @@ from sqlalchemy import select
 from random import choice
 from models import db, Account, Team, Player, Match
 from decimal import Decimal
+from flask_marshmallow import Marshmallow, Schema, fields
 
 app = Flask(__name__)
 
@@ -29,6 +30,13 @@ app.config['JWT_CSRF_CHECK_FORM'] = True
 
 db.init_app(app)
 jwt = JWTManager(app)
+ma = Marshmallow(app)
+
+
+# class Auth(Schema):
+#     email = fields.Strin(required=True)
+#     password = fields.Str(required=True)
+#
 
 
 def max_bits(b):
@@ -303,15 +311,22 @@ def update_teams(team_id, match_id):
     if match_from_db.winner is not None:
         return jsonify({'msg': 'Teams cannot be added if the match winner has been declared'}), 404
     data = request.get_json()
-    names = db.session.execute(select(Player.player_id).filter_by(team=team_id)).scalars().all()
-    team0 = set(data["team0"])
-    team1 = set(data["team1"])
-    if not team0.issubset(names) and not team1.issubset(names):
+    players = dict(db.session.execute(select(Player.name, Player.player_id).filter_by(team=team_id)).all())
+    ids = set(players.values())
+    if all(isinstance(player, int) for player in data["team0"] + data["team1"]):
+        team0 = set(data["team0"])
+        team1 = set(data["team1"])
+    elif all(isinstance(player, str) for player in data["team0"] + data["team1"]):
+        team0 = set([players[player] for player in data["team0"]])
+        team1 = set([players[player] for player in data["team1"]])
+    else:
+        return jsonify({'msg': "Pool must be provided as an array of ids (integers) or names (strings)"}), 404
+    if not team0.issubset(ids) and not team1.issubset(ids):
         return jsonify({'msg': "Team0 and Team1 must be subsets of a team's players"}), 404
     if not team0.isdisjoint(team1):
         return jsonify({'msg': 'Team0 and Team1 must be disjoint'}), 404
-    match_from_db.team0 = data["team0"]
-    match_from_db.team1 = data["team1"]
+    match_from_db.team0 = list(team0)
+    match_from_db.team1 = list(team1)
     db.session.merge(match_from_db)
     db.session.commit()
     return jsonify({'msg': 'Teams added successfully'}), 200
@@ -329,8 +344,15 @@ def update_pool(team_id, match_id):
     if not match_from_db:
         return jsonify({'msg': 'Match not found'}), 404
     data = request.get_json()
-    player_ids = db.session.execute(select(Player.player_id).filter_by(team=team_id)).scalars().all()
-    if not set(data["pool"]).issubset(player_ids):
+    players = dict(db.session.execute(select(Player.name, Player.player_id).filter_by(team=team_id)).all())
+    ids = set(players.values())
+    if all(isinstance(player, int) for player in data["pool"]):
+        pool = set(data["pool"])
+    elif all(isinstance(player, str) for player in data["pool"]):
+        pool = set([players[player] for player in data["pool"]])
+    else:
+        return jsonify({'msg': "Pool must be provided as an array of ids (integers) or names (strings)"}), 404
+    if not pool.issubset(ids):
         return jsonify({'msg': "Pool must be a subset of a team's players"}), 404
     match_from_db.pool = data["pool"]
     db.session.merge(match_from_db)
