@@ -52,9 +52,9 @@ There are four players in the pool represented by the following json:
 }
 ```
 
-The binary numbers ```1001```, ```1010``` and ```1100``` represent all possible line-ups. The scores of each team member are 
-summed to get a team rating. The difference between the ratings of each team are compared and only the line-ups with the 
-lowest difference are considered. 
+The binary numbers ```1001```, ```1010``` and ```1100``` represent all possible line-ups, with the ```0```s and ```1```s
+indexes to the players in the pool. The scores of each team member are summed to get a team rating. The difference 
+between the ratings of each team are compared and only the line-ups with the lowest difference are considered. 
 
 ```json
 {
