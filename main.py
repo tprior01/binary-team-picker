@@ -10,6 +10,12 @@ from decimal import Decimal
 
 app = Flask(__name__)
 
+
+from dotenv import load_dotenv
+load_dotenv()
+app.config['SQLALCHEMY_ECHO'] = True
+
+
 app.config["SQLALCHEMY_DATABASE_URI"] = getenv("SQLALCHEMY_DATABASE_URI")
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['JWT_SECRET_KEY'] = getenv("SECRET_KEY")
@@ -26,8 +32,10 @@ jwt = JWTManager(app)
 
 
 def binary_options(digits):
+    """Returns a list of ints whose binary representations have an even
+       number of 0's and 1's for the given number of binary digits"""
     target = digits / 2
-    return [i for i in range(int('1' * (digits - 1), 2), 2 ** digits) if i.bit_count() == target]
+    return [i for i in range(int('1' * (digits - 1), 2)) if i.bit_count() == target]
 
 
 @app.route("/", methods=["GET"])
