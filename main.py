@@ -10,12 +10,6 @@ from decimal import Decimal
 
 app = Flask(__name__)
 
-
-# from dotenv import load_dotenv
-# load_dotenv()
-# app.config['SQLALCHEMY_ECHO'] = True
-
-
 app.config["SQLALCHEMY_DATABASE_URI"] = getenv("SQLALCHEMY_DATABASE_URI")
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['JWT_SECRET_KEY'] = getenv("SECRET_KEY")
@@ -31,14 +25,9 @@ db.init_app(app)
 jwt = JWTManager(app)
 
 
-def max_bits(b):
-    """Returns the largest decimal number for a given bit length"""
-    return (1 << b) - 1
-
-
-def binary_options(pool_size, team_size):
-    """Returns a list of binary strings representing all possible team combinations"""
-    return [f"{i:b}" for i in range(max_bits(pool_size - 1), 2 ** pool_size) if f"{i:b}".count("0") == team_size]
+def binary_options(digits):
+    target = digits / 2
+    return [i for i in range(int('1' * (digits - 1), 2), 2 ** digits) if i.bit_count() == target]
 
 
 @app.route("/", methods=["GET"])
@@ -369,18 +358,39 @@ def calculate_teams(team_id, match_id):
     pool_size = len(players)
     if pool_size % 2 != 0:
         return jsonify({'msg': 'Pool must be an equal number'}), 404
-    team_size = pool_size / 2
-    pool_range = range(pool_size)
-    options = binary_options(pool_size, team_size)
+    options = binary_options(pool_size)
+
     pool_ratings = [float(player.current_rating) for player in players]
 
-    team_ratings = [round(abs(sum([pool_ratings[i] for i in pool_range if binary[i] == "0"]) -
-                              sum([pool_ratings[i] for i in pool_range if binary[i] == "1"])), 1) for binary in options]
+    team_ratings = []
+
+    for integer in options:
+        option0 = 0
+        option1 = 0
+        for i in range(pool_size - 1, -1, -1):
+            bit = (integer >> i) & 1
+            if bit == 0:
+                option0 += pool_ratings[i]
+            else:
+                option1 += pool_ratings[i]
+        team_ratings.append(round(abs(option0 - option1), 1))
+
     min_team_rating = min(team_ratings)
     parsed = [options[i] for i in range(len(options)) if team_ratings[i] == min_team_rating]
     teams = choice(parsed)
-    match_from_db.team0 = [players[i].player_id for i, bit in enumerate(teams) if bit == "0"]
-    match_from_db.team1 = [players[i].player_id for i, bit in enumerate(teams) if bit == "1"]
+
+    team0 = []
+    team1 = []
+
+    for i in range(pool_size - 1, -1, -1):
+        bit = (teams >> i) & 1
+        if bit == 0:
+            team0.append(players[i].player_id)
+        else:
+            team1.append(players[i].player_id)
+
+    match_from_db.team0 = team0
+    match_from_db.team1 = team1
     db.session.merge(match_from_db)
     db.session.commit()
     return jsonify({'msg': 'Teams calculated and updated successfully', 'total options': len(options),
